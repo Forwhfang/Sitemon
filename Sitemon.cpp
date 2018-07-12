@@ -1,42 +1,46 @@
 #include"Sitemon.hpp"
 
-#include<wininet.h>
-#include <regex> 
-#include<iostream>
+#include<wininet.h>//一个Windows下的网络库，将socket进行封装
+#include<regex>//正则表达式，用于判断输入的邮箱地址是否有效 
+#include<iostream>//用于输出提示信息
+
+//名称空间
 using std::regex;
 using std::cout;
 using std::endl;
 
-#pragma comment(lib,"ws2_32.lib")
-#pragma comment(lib, "wininet.lib")
-#pragma warning(disable:4996)
+#pragma comment(lib,"ws2_32.lib")//包含winsock库文件
+#pragma comment(lib, "wininet.lib")//包含wininet库文件
+#pragma warning(disable:4996)//忽略C产生的错误
 
+//构造函数，对目标域名与邮箱地址初始化
 Sitemon::Sitemon(std::string hostname)
 {
-	m_lpszHostname = stringToLPCWSTR(hostname);
-	m_ptrEmailTo = NULL;
-	m_bIsSend = false;
+	m_lpszHostname = stringToLPCWSTR(hostname); //目标域名初始化
+	m_ptrEmailTo = NULL;//邮箱地址初始化
+	m_bIsSend = false;//不发送邮件
 }
 
 Sitemon::Sitemon(std::string hostname, char *emailTo)
 {
-	m_lpszHostname = stringToLPCWSTR(hostname);
-	if (IsEmailValid(std::string(emailTo)))
+	m_lpszHostname = stringToLPCWSTR(hostname);//将参数列表中的hostname转化成LPCWSTR类型
+	if (IsEmailValid(std::string(emailTo)))//判断邮箱地址是否合法
 	{
-		m_ptrEmailTo = emailTo;
-		m_bIsSend = true;
+		m_ptrEmailTo = emailTo;//邮箱地址初始化
+		m_bIsSend = true;//发送邮件
 	}
 	else
 	{
 		cout << "The Email format is wrong." << endl;
-		m_ptrEmailTo = NULL;
-		m_bIsSend = false;
+		m_ptrEmailTo = NULL;//邮箱地址初始化
+		m_bIsSend = false;//不发送邮件
 	}
 }
  
+//监控网站主函数，主要运用了wininet库
 int Sitemon::monitor()
 {
-	//Initialization
+	//1.打开网络
 	HINTERNET hInternet = InternetOpen(TEXT("Microsoft Edge"), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
 	if (hInternet == NULL)
 	{
@@ -44,6 +48,7 @@ int Sitemon::monitor()
 		return -1;
 	}
 
+	//2.连接到特定目标主机的特定端口
 	HINTERNET hHttpSession = InternetConnect(hInternet, m_lpszHostname, 80, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
 	if (hHttpSession == NULL)
 	{
@@ -52,6 +57,7 @@ int Sitemon::monitor()
 		return -2;
 	}
 
+	//3.准备发送http请求
 	HINTERNET hHttpRequest = HttpOpenRequest(hHttpSession, TEXT("GET"), TEXT("/"), NULL, _T(""), NULL, 0, 0);
 	if (hHttpRequest == NULL)
 	{
@@ -61,15 +67,16 @@ int Sitemon::monitor()
 		return -3;
 	}
 
-	//Check the HTTP Status Code in loop
+	//循环判断网站是否正常
 	while (true)
 	{
-		DWORD dwRetCode = 0;
+		DWORD dwRetCode = 0;//储存返回的状态码
 		DWORD dwSizeOfRq = sizeof(DWORD);
-		HttpSendRequest(hHttpRequest, NULL, 0, NULL, 0);
-		HttpQueryInfo(hHttpRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwRetCode, &dwSizeOfRq, NULL);
-		cout << "HTTP Status Code: " << dwRetCode << endl;
-		if (dwRetCode == 0 || dwRetCode >= 400)
+		HttpSendRequest(hHttpRequest, NULL, 0, NULL, 0);//4.发送http请求
+		HttpQueryInfo(hHttpRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwRetCode, &dwSizeOfRq, NULL);//5.获取目标主机返回的信息
+		cout << "HTTP Status Code: " << dwRetCode << endl;//输出状态码
+		//根据状态码判断是否网站是否正常运行
+		if (dwRetCode == 0 || dwRetCode >= 400)//网站错误
 		{
 			switch (dwRetCode)
 			{
@@ -104,28 +111,29 @@ int Sitemon::monitor()
 			default:cout << "Unknow error." << endl;
 			}
 
-			if (m_bIsSend)
+			if (m_bIsSend)//判断是否需要发送邮件
 			{
 				std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + std::string(m_ptrEmailTo) + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
 				sendMail(m_ptrEmailTo, EmailContents.c_str());
 			}
 			
-			break;
+			break;//若网站错误则退出循环
 		}
-		else
+		else//网站正常
 		{
 			cout << "The website is on." << endl;
 			Sleep(10000);
 		}
 	}
 
-	//Closed
+	//关闭连接
 	InternetCloseHandle(hHttpRequest);
 	InternetCloseHandle(hHttpSession);
 	InternetCloseHandle(hInternet);
 	return 0;
 }
 
+//利用正则表达式判断邮箱地址是否有效
 bool Sitemon::IsEmailValid(std::string email_address)
 {
 	regex pattern("([0-9A-Za-z\\-_\\.]+)@([0-9a-z]+\\.[a-z]{2,3}(\\.[a-z]{2})?)");
@@ -135,6 +143,7 @@ bool Sitemon::IsEmailValid(std::string email_address)
 		return false;
 }
 
+//将string类型转化成LPCWSTR类型
 LPCWSTR Sitemon::stringToLPCWSTR(std::string str)
 {
 	size_t convertedChars = 0;
@@ -143,7 +152,7 @@ LPCWSTR Sitemon::stringToLPCWSTR(std::string str)
 	return wcstring;
 }
 
-
+//对邮件内容进行基于base64方式的加密
 char Sitemon::ConvertToBase64(char ch)
 {
 	if (ch < 26)
@@ -157,7 +166,6 @@ char Sitemon::ConvertToBase64(char ch)
 	else
 		return '/';
 }
-
 void Sitemon::EncodeBase64(char* dbuf, char* buf128, int len)
 {
 	struct Base64Date6 *ddd = NULL;
@@ -208,17 +216,17 @@ void Sitemon::EncodeBase64(char* dbuf, char* buf128, int len)
 	return;
 }
 
-// 打开TCP Socket连接
+//打开socket连接，被sendMail函数调用
 int Sitemon::OpenSocket(struct sockaddr *addr)
 {
 	int sockfd = 0;
-	sockfd = socket(PF_INET, SOCK_STREAM, 0);
+	sockfd = socket(PF_INET, SOCK_STREAM, 0);//创建socket，通过返回值判断是否成功
 	if (sockfd < 0)
 	{
 		cout << "Open sockfd(TCP) error!" << endl;
 		exit(-1);
 	}
-	if (connect(sockfd, addr, sizeof(struct sockaddr)) < 0)
+	if (connect(sockfd, addr, sizeof(struct sockaddr)) < 0)//创建connect，通过返回值判断是否成功
 	{
 		cout << "Connect sockfd(TCP) error!" << endl;
 		exit(-1);
@@ -226,6 +234,7 @@ int Sitemon::OpenSocket(struct sockaddr *addr)
 	return sockfd;
 }
 
+//发送邮件主函数实现，基于socket编程
 void Sitemon::sendMail(char *emailTo, const char *body)
 {
 	int sockfd = { 0 };
@@ -234,9 +243,11 @@ void Sitemon::sendMail(char *emailTo, const char *body)
 	char login[128] = { 0 };
 	char pass[128] = { 0 };
 
+	//开启连接
 	WSADATA WSAData;
 	WSAStartup(MAKEWORD(2, 2), &WSAData);
 
+	//填写sockaddr_in结构，储存连接的信息
 	struct sockaddr_in their_addr = { 0 };
 	memset(&their_addr, 0, sizeof(their_addr));
 	their_addr.sin_family = AF_INET;
@@ -249,7 +260,7 @@ void Sitemon::sendMail(char *emailTo, const char *body)
 		their_addr.sin_addr.S_un.S_un_b.s_b3,
 		their_addr.sin_addr.S_un.S_un_b.s_b4);
 
-	// 连接邮件服务器，如果连接后没有响应，则2秒后重新连接
+	//连接邮件服务器，如果连接后没有响应，则2秒后重新连接
 	sockfd = OpenSocket((struct sockaddr *)&their_addr);
 	memset(rbuf, 0, 1500);
 	while (recv(sockfd, rbuf, 1500, 0) == 0)
@@ -260,6 +271,13 @@ void Sitemon::sendMail(char *emailTo, const char *body)
 		memset(rbuf, 0, 1500);
 	}
 	cout << rbuf << endl;
+
+	//以下是根据特定的格式给邮件服务器发送请求
+	//主要调用的几个函数如下：
+	//memset把要储存发送信息的char数组和要接收信息的char数组初始化
+	//sprintf_s把要发送的信息储存到char数组
+	//send发送信息给服务器
+	//recv接收服务器返回的信息
 
 	// EHLO
 	memset(buf, 0, 1500);
@@ -303,14 +321,14 @@ void Sitemon::sendMail(char *emailTo, const char *body)
 
 	// MAIL FROM
 	memset(buf, 0, 1500);
-	sprintf_s(buf, 1500, "MAIL FROM: <895846885@qq.com>\r\n");  //此处要和发邮件的邮箱保持一致
+	sprintf_s(buf, 1500, "MAIL FROM: <895846885@qq.com>\r\n");
 	send(sockfd, buf, strlen(buf), 0);
 	memset(rbuf, 0, 1500);
 	recv(sockfd, rbuf, 1500, 0);
 	cout << "set Mail From Receive: " << rbuf << endl;
 
 	// RCPT TO 第一个收件人
-	sprintf_s(buf, 1500, "RCPT TO:<%s>\r\n", emailTo);  //此处要和收邮件的邮箱保持一致
+	sprintf_s(buf, 1500, "RCPT TO:<%s>\r\n", emailTo);
 	send(sockfd, buf, strlen(buf), 0);
 	memset(rbuf, 0, 1500);
 	recv(sockfd, rbuf, 1500, 0);
