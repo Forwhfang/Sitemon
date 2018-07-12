@@ -1,8 +1,9 @@
-#include"stdafx.h"
-#include"Sitemon.h"
+#include"Sitemon.hpp"
 
 #include<wininet.h>
+#include <regex> 
 #include<iostream>
+using std::regex;
 using std::cout;
 using std::endl;
 
@@ -13,6 +14,24 @@ using std::endl;
 Sitemon::Sitemon(std::string hostname)
 {
 	m_lpszHostname = stringToLPCWSTR(hostname);
+	m_ptrEmailTo = NULL;
+	m_bIsSend = false;
+}
+
+Sitemon::Sitemon(std::string hostname, char *emailTo)
+{
+	m_lpszHostname = stringToLPCWSTR(hostname);
+	if (IsEmailValid(std::string(emailTo)))
+	{
+		m_ptrEmailTo = emailTo;
+		m_bIsSend = true;
+	}
+	else
+	{
+		cout << "The Email format is wrong." << endl;
+		m_ptrEmailTo = NULL;
+		m_bIsSend = false;
+	}
 }
  
 int Sitemon::monitor()
@@ -85,10 +104,12 @@ int Sitemon::monitor()
 			default:cout << "Unknow error." << endl;
 			}
 
-			/*std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Fang\"<945338423@qq.com>\r\nSubject: Hello\r\n\r\nYour website is down.\n";
-			char EmailTo[] = "945338423@qq.com";
-			sendMail(EmailTo, EmailContents.c_str());*/
-
+			if (m_bIsSend)
+			{
+				std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + std::string(m_ptrEmailTo) + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
+				sendMail(m_ptrEmailTo, EmailContents.c_str());
+			}
+			
 			break;
 		}
 		else
@@ -105,6 +126,14 @@ int Sitemon::monitor()
 	return 0;
 }
 
+bool Sitemon::IsEmailValid(std::string email_address)
+{
+	regex pattern("([0-9A-Za-z\\-_\\.]+)@([0-9a-z]+\\.[a-z]{2,3}(\\.[a-z]{2})?)");
+	if (regex_match(email_address, pattern))
+		return true;
+	else
+		return false;
+}
 
 LPCWSTR Sitemon::stringToLPCWSTR(std::string str)
 {
@@ -197,8 +226,7 @@ int Sitemon::OpenSocket(struct sockaddr *addr)
 	return sockfd;
 }
 
-//--------------------有两个地方需要修改--------------------
-void Sitemon::sendMail(char *email, const char *body)
+void Sitemon::sendMail(char *emailTo, const char *body)
 {
 	int sockfd = { 0 };
 	char buf[1500] = { 0 };
@@ -282,7 +310,7 @@ void Sitemon::sendMail(char *email, const char *body)
 	cout << "set Mail From Receive: " << rbuf << endl;
 
 	// RCPT TO 第一个收件人
-	sprintf_s(buf, 1500, "RCPT TO:<%s>\r\n", "945338423@qq.com");  //此处要和收邮件的邮箱保持一致
+	sprintf_s(buf, 1500, "RCPT TO:<%s>\r\n", emailTo);  //此处要和收邮件的邮箱保持一致
 	send(sockfd, buf, strlen(buf), 0);
 	memset(rbuf, 0, 1500);
 	recv(sockfd, rbuf, 1500, 0);

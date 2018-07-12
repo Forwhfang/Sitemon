@@ -1,5 +1,5 @@
-#ifndef SITEMON_H
-#define SITEMON_H
+#ifndef SITEMON_HPP
+#define SITEMON_HPP
 
 #include<Windows.h>
 #include<string>
@@ -8,11 +8,14 @@ class Sitemon
 {
 public:
 	Sitemon(std::string hostname);
+	Sitemon(std::string hostname, char *emailto);
 	int monitor();
 
 private:
 	//data members
 	LPCWSTR m_lpszHostname;
+	char *m_ptrEmailTo;
+	bool m_bIsSend;
 	struct Base64Date6
 	{
 		unsigned int d4 : 6;
@@ -22,6 +25,7 @@ private:
 	};
 
 	//member functions
+	bool IsEmailValid(std::string email_address);
 	LPCWSTR stringToLPCWSTR(std::string str);
 	char ConvertToBase64(char c6);
 	void EncodeBase64(char *dbuf, char *buf128, int len);
@@ -29,4 +33,4 @@ private:
 	void sendMail(char* email, const char* body);
 };
 
-#endif  //SITEMON_H
+#endif  //SITEMON_HPP
