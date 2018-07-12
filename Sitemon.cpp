@@ -10,12 +10,9 @@ using std::endl;
 #pragma comment(lib, "wininet.lib")
 #pragma warning(disable:4996)
 
-Sitemon::Sitemon(std::string hostname, int port, std::string verb, std::string urlpath)
+Sitemon::Sitemon(std::string hostname)
 {
 	m_lpszHostname = stringToLPCWSTR(hostname);
-	m_iPort = port;
-	m_lpszVerb = stringToLPCWSTR(verb);
-	m_lpszUrlpath = stringToLPCWSTR(urlpath);
 }
  
 int Sitemon::monitor()
@@ -28,7 +25,7 @@ int Sitemon::monitor()
 		return -1;
 	}
 
-	HINTERNET hHttpSession = InternetConnect(hInternet, m_lpszHostname, m_iPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+	HINTERNET hHttpSession = InternetConnect(hInternet, m_lpszHostname, 80, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
 	if (hHttpSession == NULL)
 	{
 		InternetCloseHandle(hInternet);
@@ -36,7 +33,7 @@ int Sitemon::monitor()
 		return -2;
 	}
 
-	HINTERNET hHttpRequest = HttpOpenRequest(hHttpSession, m_lpszVerb, m_lpszUrlpath, NULL, _T(""), NULL, 0, 0);
+	HINTERNET hHttpRequest = HttpOpenRequest(hHttpSession, TEXT("GET"), TEXT("/"), NULL, _T(""), NULL, 0, 0);
 	if (hHttpRequest == NULL)
 	{
 		InternetCloseHandle(hHttpSession);
@@ -52,14 +49,46 @@ int Sitemon::monitor()
 		DWORD dwSizeOfRq = sizeof(DWORD);
 		HttpSendRequest(hHttpRequest, NULL, 0, NULL, 0);
 		HttpQueryInfo(hHttpRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwRetCode, &dwSizeOfRq, NULL);
-		cout << "State Code: " << dwRetCode << endl;
-		//--------------------错误判定（需要修改）--------------------
-		if (dwRetCode>=400)//bad state code
+		cout << "HTTP Status Code: " << dwRetCode << endl;
+		if (dwRetCode == 0 || dwRetCode >= 400)
 		{
-			std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Fang\"<945338423@qq.com>\r\nSubject: Hello\r\n\r\nYour website is down.\n";
+			switch (dwRetCode)
+			{
+			case 0:cout << "Not exist" << endl; break;
+
+			case 400:cout << "Bad Request" << endl; break;
+			case 401:cout << "Unauthorized" << endl; break;
+			case 402:cout << "Payment Required" << endl; break;
+			case 403:cout << "Forbidden" << endl; break;
+			case 404:cout << "Not Found" << endl; break;
+			case 405:cout << "Method Not Allowed" << endl; break;
+			case 406:cout << "Not Acceptable" << endl; break;
+			case 407:cout << "Proxy Authentication Required" << endl; break;
+			case 408:cout << "Request Time-out" << endl; break;
+			case 409:cout << "Conflict" << endl; break;
+			case 410:cout << "Gone" << endl; break;
+			case 411:cout << "Length Required" << endl; break;
+			case 412:cout << "Precondition Failed" << endl; break;
+			case 413:cout << "Request Entity Too Large" << endl; break;
+			case 414:cout << "Request - URI Too Large" << endl; break;
+			case 415:cout << "Unsupported Media Type" << endl; break;
+			case 416:cout << "Requested range not satisfiable" << endl; break;
+			case 417:cout << "Expectation Failed" << endl; break;
+
+			case 500:cout << "Internal Server Error" << endl; break;
+			case 501:cout << "Not Implemented" << endl; break; 
+			case 502:cout << "Bad Gateway" << endl; break;
+			case 503:cout << "Service Unavailable" << endl; break;
+			case 504:cout << "Gateway Time-out" << endl; break;
+			case 505:cout << "HTTP Version not supported" << endl; break;
+
+			default:cout << "Unknow error." << endl;
+			}
+
+			/*std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Fang\"<945338423@qq.com>\r\nSubject: Hello\r\n\r\nYour website is down.\n";
 			char EmailTo[] = "945338423@qq.com";
-			sendMail(EmailTo, EmailContents.c_str());
-			cout << "The website is down." << endl;
+			sendMail(EmailTo, EmailContents.c_str());*/
+
 			break;
 		}
 		else

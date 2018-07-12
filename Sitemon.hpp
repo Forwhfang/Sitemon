@@ -7,15 +7,12 @@
 class Sitemon
 {
 public:
-	Sitemon(std::string hostname, int port = 80, std::string urlpath = "/", std::string verb = "GET");
+	Sitemon(std::string hostname);
 	int monitor();
 
 private:
 	//data members
 	LPCWSTR m_lpszHostname;
-	int m_iPort;
-	LPCWSTR m_lpszUrlpath;
-	LPCWSTR m_lpszVerb;
 	struct Base64Date6
 	{
 		unsigned int d4 : 6;
