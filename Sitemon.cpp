@@ -3,11 +3,14 @@
 #include<wininet.h>//一个Windows下的网络库，将socket进行封装
 #include<regex>//正则表达式，用于判断输入的邮箱地址是否有效 
 #include<iostream>//用于输出提示信息
+#include<fstream>//用于文件输入
 
 //名称空间
 using std::regex;
 using std::cout;
+using std::cin;
 using std::endl;
+using std::ofstream;
 
 #pragma comment(lib,"ws2_32.lib")//包含winsock库文件
 #pragma comment(lib, "wininet.lib")//包含wininet库文件
@@ -17,29 +20,25 @@ using std::endl;
 Sitemon::Sitemon(std::string hostname)
 {
 	m_sHostname = hostname; //目标域名初始化
-	m_ptrEmailTo = NULL;//邮箱地址初始化
-	m_bIsSend = false;//不发送邮件
-}
-
-Sitemon::Sitemon(std::string hostname, char *emailTo)
-{
-	m_sHostname = hostname;//将参数列表中的hostname转化成LPCWSTR类型
-	if (IsEmailValid(std::string(emailTo)))//判断邮箱地址是否合法
-	{
-		m_ptrEmailTo = emailTo;//邮箱地址初始化
-		m_bIsSend = true;//发送邮件
-	}
-	else
-	{
-		cout << "The Email format is wrong." << endl;
-		m_ptrEmailTo = NULL;//邮箱地址初始化
-		m_bIsSend = false;//不发送邮件
-	}
 }
  
 //监控网站主函数，主要运用了wininet库
-int Sitemon::monitor()
+int Sitemon::monitor(bool isSendEmail)
 {
+	//若需要发送邮件则传入邮箱地址
+	std::string emailTo;
+	if (isSendEmail)
+	{	
+		cout << "Please input the Email address: " << endl;
+		cin >> emailTo;
+		while (!IsEmailValid(emailTo))
+		{
+			cout << "Email address is not valid. Please enter again." << endl;
+			cin >> emailTo;
+		}
+		cout << "Email address is valid." << endl;
+	}
+
 	//1.打开网络
 	HINTERNET hInternet = InternetOpen(TEXT("Microsoft Edge"), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
 	if (hInternet == NULL)
@@ -115,10 +114,10 @@ int Sitemon::monitor()
 			default:cout << "Unknow error." << endl; break;
 			}
 
-			if (m_bIsSend)//判断是否需要发送邮件
+			if (isSendEmail)//判断是否需要发送邮件
 			{
-				std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + std::string(m_ptrEmailTo) + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
-				SendMail(m_ptrEmailTo, EmailContents.c_str());
+				std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + emailTo + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
+				SendMail(emailTo.c_str(), EmailContents.c_str());
 			}
 			
 			break;//若网站错误则退出循环
@@ -138,8 +137,22 @@ int Sitemon::monitor()
 }
 
 //获取HTML网页信息主函数，基于socket编程
-int Sitemon::GetHtml()
+int Sitemon::GetHtml(bool isToFile)
 {
+	//若需要输入到文件则输入文件名
+	std::string fileName;
+	if (isToFile)
+	{
+		cout << "Please input the file name: " << endl;
+		cin >> fileName;
+		while (!IsFileValid(fileName))
+		{
+			cout << "File name is not valid. Please enter again." << endl;
+			cin >> fileName;
+		}
+		cout << "File name is valid." << endl;
+	}
+
 	//打开网络连接
 	WSADATA wsa;
 	WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -174,41 +187,45 @@ int Sitemon::GetHtml()
 	//发送html请求
 	memset(sndBuf, 0, 1024);
 	strcat(sndBuf, "GET / HTTP/1.1\r\n\r\n");
-	if ((num = send(s, sndBuf, 1024, 0))<0)
+	num = send(s, sndBuf, 1024, 0);
+	if (num < 0)
 	{
 		cout << "Send error" << endl;
 		return -3;
 	}
 
 	//接收网站返回信息
-	memset(rcvBuf, 0, 2048);
-	do {
-		if ((num = recv(s, rcvBuf, 2048, 0)) < 0)
-		{
-			cout << "Receive error" << endl;
-			return -4;
-		}
-		else if (num>0)
-		{
-			//统一编码方式，为了正确输出中文字符
-			int  unicodeLen = ::MultiByteToWideChar(CP_UTF8, 0, rcvBuf, -1, NULL, 0);
-			wchar_t *pUnicode = new wchar_t[unicodeLen];
-			memset(pUnicode, 0, unicodeLen * sizeof(wchar_t));
-			::MultiByteToWideChar(CP_UTF8, 0, rcvBuf, -1, (LPWSTR)pUnicode, unicodeLen);
-			int pSize = WideCharToMultiByte(CP_OEMCP, 0, pUnicode, wcslen(pUnicode), NULL, 0, NULL, NULL);
-			char *pWchar_tToChar = new char[pSize + 1];
-			WideCharToMultiByte(CP_OEMCP, 0, pUnicode, wcslen(pUnicode), pWchar_tToChar, pSize, NULL, NULL);
-			pWchar_tToChar[pSize] = '\0';
-			cout << pWchar_tToChar << endl;
+	std::string toFile;
+	while (true)
+	{
+		memset(rcvBuf, 0, 2048);
+		num = recv(s, rcvBuf, 2048, 0);
 
-			//printf("%s", rcvBuf);
-			memset(rcvBuf, 0, 2048);
-		}
-	} while (num>0);
+		//统一编码方式，为了正确输出中文字符
+		int  unicodeLen = ::MultiByteToWideChar(CP_UTF8, 0, rcvBuf, -1, NULL, 0);
+		wchar_t *pUnicode = new wchar_t[unicodeLen];
+		memset(pUnicode, 0, unicodeLen * sizeof(wchar_t));
+		::MultiByteToWideChar(CP_UTF8, 0, rcvBuf, -1, (LPWSTR)pUnicode, unicodeLen);
+		int pSize = WideCharToMultiByte(CP_OEMCP, 0, pUnicode, wcslen(pUnicode), NULL, 0, NULL, NULL);
+		char *pWchar_tToChar = new char[pSize + 1];
+		WideCharToMultiByte(CP_OEMCP, 0, pUnicode, wcslen(pUnicode), pWchar_tToChar, pSize, NULL, NULL);
+		pWchar_tToChar[pSize] = '\0';
+		cout << pWchar_tToChar << endl;
+		//printf("%s", rcvBuf);
 
-	//间隔10秒
-	Sleep(10000);
-	system("cls");
+		if(isToFile)
+			toFile += pWchar_tToChar;
+
+		if (strlen(rcvBuf) < 2048)
+			break;
+	}
+
+	//输出到文件
+	if (isToFile)
+	{
+		ofstream fout(fileName + ".txt", std::ios::out);
+		fout << toFile;
+	}
 
 	//清理工作
 	closesocket(s);
@@ -224,6 +241,19 @@ bool Sitemon::IsEmailValid(std::string email_address)
 		return true;
 	else
 		return false;
+}
+
+//判断文件名称是否有效
+bool Sitemon::IsFileValid(std::string file_name)
+{
+	if (file_name.length() == 0 || file_name.length() > 255)
+		return false;
+	for (int i = 0; i < file_name.length(); i++)
+	{
+		if (file_name[i] == '?' || file_name[i] == '/' || file_name[i] == '\\' || file_name[i] == '*' || file_name[i] == '|' || file_name[i] == '\"' || file_name[i] == '<' || file_name[i] == '>')
+			return false;
+	}
+	return true;
 }
 
 //将string类型转化成LPCWSTR类型
@@ -318,7 +348,7 @@ int Sitemon::OpenSocket(struct sockaddr *addr)
 }
 
 //发送邮件主函数实现，基于socket编程
-void Sitemon::SendMail(char *emailTo, const char *body)
+void Sitemon::SendMail(const char *emailTo, const char *body)
 {
 	int sockfd = 0;
 	char buf[1500] = { 0 };
