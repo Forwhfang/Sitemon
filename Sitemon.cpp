@@ -7,11 +7,11 @@
 
 //名称空间
 using std::regex;
-using std::string;
+using std::string; 
+using std::ofstream;
 using std::cout;
 using std::cin;
 using std::endl;
-using std::ofstream;
 
 #pragma comment(lib,"ws2_32.lib")//包含winsock库文件
 #pragma comment(lib, "wininet.lib")//包含wininet库文件
@@ -23,7 +23,7 @@ Sitemon::Sitemon(string hostname)
 	m_sHostname = hostname; //目标域名初始化
 }
  
-//监控网站主函数，主要运用了wininet库
+//监控网站主函数，基于wininet网络库
 int Sitemon::monitor(bool isSendEmail)
 {
 	//若需要发送邮件则传入邮箱地址
@@ -75,12 +75,12 @@ int Sitemon::monitor(bool isSendEmail)
 		clock_t start, finish;//储存程序运行时间
 		start = clock();
 		HttpSendRequest(hHttpRequest, NULL, 0, NULL, 0);//4.发送http请求
-		HttpQueryInfo(hHttpRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwRetCode, &dwSizeOfRq, NULL);//5.获取目标主机返回的信息
+		HttpQueryInfo(hHttpRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwRetCode, &dwSizeOfRq, NULL);//5.获取目标主机返回的状态码
 		finish = clock();
 		cout << "Delay Time: " << (double)(finish - start) / CLOCKS_PER_SEC << endl;//输出网络延迟时间
 		cout << "HTTP Status Code: " << dwRetCode << endl;//输出状态码
 		//根据状态码判断是否网站是否正常运行
-		if (dwRetCode == 0 || dwRetCode >= 400)//网站错误
+		if (dwRetCode == 0 || dwRetCode >= 400)//网站异常
 		{
 			switch (dwRetCode)
 			{
@@ -115,13 +115,15 @@ int Sitemon::monitor(bool isSendEmail)
 			default:cout << "Unknow error." << endl; break;
 			}
 
-			if (isSendEmail)//判断是否需要发送邮件
+			//判断是否需要发送邮件
+			if (isSendEmail)
 			{
 				string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + emailTo + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
 				SendMail(emailTo.c_str(), EmailContents.c_str());
 			}
 			
-			break;//若网站错误则退出循环
+			//若网站错误则退出循环
+			break;
 		}
 		else//网站正常
 		{
@@ -137,7 +139,7 @@ int Sitemon::monitor(bool isSendEmail)
 	return 0;
 }
 
-//获取HTML网页信息主函数，基于socket编程
+//获取HTML网页信息主函数，基于wininet网络库
 int Sitemon::GetHtml(bool isToFile)
 {
 	//若需要输入到文件则输入文件名
@@ -154,83 +156,105 @@ int Sitemon::GetHtml(bool isToFile)
 		cout << "File name is valid." << endl;
 	}
 
-	//打开网络连接
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa);
-
-	//创建套接字
-	SOCKET s;
-	if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	//1.打开网络
+	HINTERNET hInternet = InternetOpen(TEXT("Microsoft Edge"), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+	if (hInternet == NULL)
 	{
-		cout << "Socket error" << endl;
+		cout << "Open error." << endl;
 		return -1;
 	}
 
-	//填充sockaddr_in结构，储存待连接网站相关参数
-	struct sockaddr_in serv;
-	memset(&serv, 0, sizeof(serv));
-	serv.sin_family = AF_INET;
-	serv.sin_port = htons(80);
-	hostent* hptr = gethostbyname(m_sHostname.c_str());//按域名进行连接
-	memcpy(&serv.sin_addr.S_un.S_addr, hptr->h_addr_list[0], hptr->h_length);
-
-	//连接网站
-	if ((connect(s, (struct sockaddr *)&serv, sizeof(serv)))<0)
+	//2.连接到特定目标主机的特定端口
+	HINTERNET hHttpSession = InternetConnect(hInternet, stringToLPCWSTR(m_sHostname), 80, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+	if (hHttpSession == NULL)
 	{
+		InternetCloseHandle(hInternet);
 		cout << "Connect error" << endl;
 		return -2;
 	}
 
-	int num = 0;
-	char sndBuf[1024] = { 0 };
-	char rcvBuf[2048] = { 0 };
-
-	//发送html请求
-	memset(sndBuf, 0, 1024);
-	strcat(sndBuf, "GET / HTTP/1.1\r\n\r\n");
-	num = send(s, sndBuf, 1024, 0);
-	if (num < 0)
+	//3.准备发送http请求
+	HINTERNET hHttpRequest = HttpOpenRequest(hHttpSession, TEXT("GET"), TEXT("/"), NULL, TEXT(""), NULL, 0, 0);
+	if (hHttpRequest == NULL)
 	{
-		cout << "Send error" << endl;
+		InternetCloseHandle(hHttpSession);
+		InternetCloseHandle(hInternet);
+		cout << "Send error." << endl;
 		return -3;
 	}
 
-	//接收网站返回信息
-	string toFile;
-	while (true)
+	//4.判断网站是否正常
+	DWORD dwRetCode = 0;
+	DWORD dwSizeOfRq = sizeof(DWORD);
+	if (!HttpSendRequest(hHttpRequest, NULL, 0, NULL, 0) ||
+		!HttpQueryInfo(hHttpRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwRetCode, &dwSizeOfRq, NULL)
+		|| dwRetCode >= 400 || dwRetCode == 0)
 	{
-		memset(rcvBuf, 0, 2048);
-		num = recv(s, rcvBuf, 2048, 0);
-
-		//统一编码方式，为了正确输出中文字符
-		int  unicodeLen = ::MultiByteToWideChar(CP_UTF8, 0, rcvBuf, -1, NULL, 0);
-		wchar_t *pUnicode = new wchar_t[unicodeLen];
-		memset(pUnicode, 0, unicodeLen * sizeof(wchar_t));
-		::MultiByteToWideChar(CP_UTF8, 0, rcvBuf, -1, (LPWSTR)pUnicode, unicodeLen);
-		int pSize = WideCharToMultiByte(CP_OEMCP, 0, pUnicode, wcslen(pUnicode), NULL, 0, NULL, NULL);
-		char *pWchar_tToChar = new char[pSize + 1];
-		WideCharToMultiByte(CP_OEMCP, 0, pUnicode, wcslen(pUnicode), pWchar_tToChar, pSize, NULL, NULL);
-		pWchar_tToChar[pSize] = '\0';
-		cout << pWchar_tToChar << endl;
-		//printf("%s", rcvBuf);
-
-		if(isToFile)
-			toFile += pWchar_tToChar;
-
-		if (strlen(rcvBuf) < 2048)
-			break;
+		InternetCloseHandle(hHttpRequest);
+		InternetCloseHandle(hHttpSession);
+		InternetCloseHandle(hInternet);
+		cout << "Receive error." << endl;
+		return -4;
 	}
 
-	//输出到文件
+	//5.判断网站数据是否可获取及查询网站文件总字节数
+	DWORD dwContentLen;
+	if (!InternetQueryDataAvailable(hHttpRequest, &dwContentLen, 0, 0) || dwContentLen == 0)
+	{
+		InternetCloseHandle(hHttpRequest);
+		InternetCloseHandle(hHttpSession);
+		InternetCloseHandle(hInternet);
+		cout << "Query error" << endl;
+		return -5;
+	}
+
+	//6.读取网站文件
+	string html;
+	char szBuffer[1024] = { 0 };
+	DWORD dwBytesRead;
+	while (InternetReadFile(hHttpRequest, szBuffer, sizeof(szBuffer), &dwBytesRead))
+	{
+		if (0 == dwBytesRead)
+			break;
+		
+		//统一编码方式
+		//char*->wchar*
+		int wcLen = ::MultiByteToWideChar(CP_UTF8, 0, szBuffer, -1, NULL, 0);
+		wchar_t *pWchar = new wchar_t[wcLen];
+		memset(pWchar, 0, wcLen * sizeof(wchar_t));
+		::MultiByteToWideChar(CP_UTF8, 0, szBuffer, -1, (LPWSTR)pWchar, wcLen);
+		//wchar*->char*
+		int cLen = WideCharToMultiByte(CP_OEMCP, 0, pWchar, wcslen(pWchar), NULL, 0, NULL, NULL);
+		char *pChar = new char[cLen + 1];
+		WideCharToMultiByte(CP_OEMCP, 0, pWchar, wcslen(pWchar), pChar, cLen, NULL, NULL);
+		pChar[cLen] = '\0';
+
+		html += pChar;
+	}
+
+	//将读取内容写入文件或输出到控制台
 	if (isToFile)
 	{
 		ofstream fout(fileName + ".txt", std::ios::out);
-		fout << toFile;
+		if (!fout.is_open())
+		{
+			cout << "File Open error." << endl;
+			return -6;
+		}
+		fout << html;
+		cout << "HTML content is written to the file." << endl;
+		fout.close();
+	}
+	else
+	{
+		cout << html;
+		cout << "HTML content is written to the console." << endl;
 	}
 
-	//清理工作
-	closesocket(s);
-	WSACleanup();
+	//清理
+	InternetCloseHandle(hInternet);
+	InternetCloseHandle(hHttpSession);
+	InternetCloseHandle(hHttpRequest);
 	return 0;
 }
 
