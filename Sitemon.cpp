@@ -7,6 +7,7 @@
 
 //名称空间
 using std::regex;
+using std::string;
 using std::cout;
 using std::cin;
 using std::endl;
@@ -17,7 +18,7 @@ using std::ofstream;
 #pragma warning(disable:4996)//忽略C产生的错误
 
 //构造函数，对目标域名与邮箱地址初始化
-Sitemon::Sitemon(std::string hostname)
+Sitemon::Sitemon(string hostname)
 {
 	m_sHostname = hostname; //目标域名初始化
 }
@@ -26,7 +27,7 @@ Sitemon::Sitemon(std::string hostname)
 int Sitemon::monitor(bool isSendEmail)
 {
 	//若需要发送邮件则传入邮箱地址
-	std::string emailTo;
+	string emailTo;
 	if (isSendEmail)
 	{	
 		cout << "Please input the Email address: " << endl;
@@ -57,7 +58,7 @@ int Sitemon::monitor(bool isSendEmail)
 	}
 
 	//3.准备发送http请求
-	HINTERNET hHttpRequest = HttpOpenRequest(hHttpSession, TEXT("GET"), TEXT("/"), NULL, _T(""), NULL, 0, 0);
+	HINTERNET hHttpRequest = HttpOpenRequest(hHttpSession, TEXT("GET"), TEXT("/"), NULL, TEXT(""), NULL, 0, 0);
 	if (hHttpRequest == NULL)
 	{
 		InternetCloseHandle(hHttpSession);
@@ -116,7 +117,7 @@ int Sitemon::monitor(bool isSendEmail)
 
 			if (isSendEmail)//判断是否需要发送邮件
 			{
-				std::string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + emailTo + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
+				string EmailContents = "From: \"Sitemon\"<895846885@qq.com>\r\nTo: \"Client\"<" + emailTo + ">\r\nSubject: Hello\r\n\r\nYour website is down.\n";
 				SendMail(emailTo.c_str(), EmailContents.c_str());
 			}
 			
@@ -140,7 +141,7 @@ int Sitemon::monitor(bool isSendEmail)
 int Sitemon::GetHtml(bool isToFile)
 {
 	//若需要输入到文件则输入文件名
-	std::string fileName;
+	string fileName;
 	if (isToFile)
 	{
 		cout << "Please input the file name: " << endl;
@@ -195,7 +196,7 @@ int Sitemon::GetHtml(bool isToFile)
 	}
 
 	//接收网站返回信息
-	std::string toFile;
+	string toFile;
 	while (true)
 	{
 		memset(rcvBuf, 0, 2048);
@@ -234,7 +235,7 @@ int Sitemon::GetHtml(bool isToFile)
 }
 
 //利用正则表达式判断邮箱地址是否有效（调用C++11新标准中的regex类）
-bool Sitemon::IsEmailValid(std::string email_address)
+bool Sitemon::IsEmailValid(string email_address)
 {
 	regex pattern("([0-9A-Za-z\\-_\\.]+)@([0-9a-z]+\\.[a-z]{2,3}(\\.[a-z]{2})?)");
 	if (regex_match(email_address, pattern))
@@ -244,7 +245,7 @@ bool Sitemon::IsEmailValid(std::string email_address)
 }
 
 //判断文件名称是否有效
-bool Sitemon::IsFileValid(std::string file_name)
+bool Sitemon::IsFileValid(string file_name)
 {
 	if (file_name.length() == 0 || file_name.length() > 255)
 		return false;
@@ -257,7 +258,7 @@ bool Sitemon::IsFileValid(std::string file_name)
 }
 
 //将string类型转化成LPCWSTR类型
-LPCWSTR Sitemon::stringToLPCWSTR(std::string str)
+LPCWSTR Sitemon::stringToLPCWSTR(string str)
 {
 	size_t convertedChars = 0;
 	wchar_t *wcstring = (wchar_t *)malloc(sizeof(wchar_t)*(str.length() - 1));

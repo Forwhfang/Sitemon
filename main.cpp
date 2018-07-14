@@ -1,9 +1,10 @@
 #include"Sitemon.hpp"
 
+
 //测试文件
 int main()
 {
-	Sitemon obj("www.xwayne.com");
+	Sitemon obj("www.baidu.com");
 	//提供测试网站如下
 	//www.baidu.com 
 	//www.xwayne.com
@@ -20,9 +21,9 @@ int main()
 	//获取指定网页源代码，传入参数false时，输出到控制台中
 	//obj.GetHtml(false); 
 
-	//------------------------------Test three------------------------------
+	//------------------------------Test four------------------------------
 	//获取指定网页源代码，传入参数true时，输出到控制台中,同时输出到指定文件
-	//obj.GetHtml(true);
+	obj.GetHtml(true);
 
 	return 0;
 }
